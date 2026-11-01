@@ -65,7 +65,7 @@ const servidor = http.createServer(function (req, res) {
 // Sin este manejador, un puerto ocupado termina con un error difícil de leer.
 servidor.on('error', function (error) {
   if (error.code === 'EADDRINUSE') {
-    console.error('El puerto ' + PUERTO + ' está ocupado. Probá con otro: $env:PORT=3001; npm run web');
+    console.error('El puerto ' + PUERTO + ' está ocupado. Use otro con: $env:PORT=3001; node server.js');
   } else {
     console.error('No se pudo iniciar el servidor: ' + error.message);
   }

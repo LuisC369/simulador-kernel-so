@@ -1,0 +1,31 @@
+reset
+# ============================================================
+# Caso 3: sucesión de ráfagas en Round Robin con quantum 3
+# ============================================================
+# Cargo la Tarea 12, Ejercicio 1: P1 (ráfaga 8), P2 (ráfaga 4) y P3 (ráfaga 2).
+# Los tres llegan en t=0.
+ejemplo
+# Avanzo 3 unidades. P1 usa todo su quantum, pero sigue en CPU: la expropiación se
+# resuelve al inicio del siguiente tick.
+tick 3
+# Debo ver a P1 con 5 de ráfaga restante y pc 3, y a P2 y P3 con 3 de espera.
+ps
+# Ejecuto hasta el final. Debo ver cada "Quantum agotado" y cada despacho.
+run
+# Espero esta sucesión: P1[0-3] P2[3-6] P3[6-8] P1[8-11] P2[11-12] P1[12-14]
+gantt
+# Comparo la tabla final con mis cálculos teóricos.
+ps
+# ------------------------------------------------------------
+# Valores teóricos, resueltos a mano (Tarea 12, Ejercicio 1):
+#   Proceso  Fin  Retorno  Espera  Respuesta
+#   P1       14   14       6       0
+#   P2       12   12       8       3
+#   P3       8    8        6       6
+#   Espera promedio: (6 + 8 + 6) / 3 = 6.67
+#   Retorno promedio: (14 + 12 + 8) / 3 = 11.33
+#   Respuesta promedio: (0 + 3 + 6) / 3 = 3.00
+#   Utilización de CPU: 14 / 14 = 100%
+#   Productividad: 3 / 14 = 0.21 procesos por unidad de tiempo
+#   Cambios de contexto por quantum: 3
+# ------------------------------------------------------------

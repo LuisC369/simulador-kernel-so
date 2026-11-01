@@ -1,0 +1,40 @@
+reset
+# ============================================================
+# Caso 1: rechazo de procesos por falta de RAM
+# ============================================================
+# Aquí creo un proceso de 60 MB. Hay 100 MB libres, así que entra en la dirección 0.
+crear 60 10
+# Ahora creo uno de 30 MB. Primer ajuste lo coloca justo después, en la dirección 60.
+crear 30 5
+# Solo quedan 10 MB libres, por eso espero que este proceso de 20 MB dé Out of Memory.
+crear 20 4
+# En el mapa debo ver a P1, a P2 y un hueco de 10 MB al final.
+mem
+# Aborto a P1 para liberar sus 60 MB.
+kill 1
+# El mismo proceso de 20 MB ahora sí entra, en el hueco de la dirección 0.
+# El rechazo anterior no consumió el PID, así que este proceso es P3.
+crear 20 4
+# Debo ver a P3, un hueco de 40 MB, a P2 y el hueco de 10 MB.
+mem
+# ============================================================
+# Caso 2: fragmentación externa
+# ============================================================
+reset
+# Lleno 90 MB con tres procesos de 30 MB.
+crear 30 5
+crear 30 5
+crear 30 5
+# Aborto a P1 y a P3 para dejar dos huecos separados por P2.
+kill 1
+kill 3
+# Hay 70 MB libres en total, pero el hueco mayor es de 40 MB.
+mem
+# Espero Out of Memory: 50 MB caben en el total libre, pero no en un hueco contiguo.
+crear 50 5
+# Estos 40 MB no caben en el hueco de la dirección 0, así que entran en la dirección 60.
+crear 40 5
+# Estos 30 MB sí caben en el primer hueco, en la dirección 0.
+crear 30 5
+# La memoria queda llena: usada 100 MB, libre 0 MB.
+mem

@@ -1,0 +1,20 @@
+reset
+# ============================================================
+# Caso 6: detección y eliminación de un deadlock
+# ============================================================
+# Fuerzo la espera circular: P1 retiene R1 y pide R2, y P2 retiene R2 y pide R1.
+# Debo ver la alerta DEADLOCK detectado: P1 -> R2 -> P2 -> R1 -> P1
+deadlock
+# Los dos procesos deben aparecer BLOQUEADO, con su ráfaga completa.
+ps
+# Avanzo 3 unidades para demostrar que no progresan: el reloj sube, pero la CPU sigue libre.
+tick 3
+# Elimino el deadlock abortando a P2. Debe liberar R2, que pasa a P1.
+# Debo ver el evento Deadlock resuelto.
+kill 2
+# P2 aparece ABORTADO y P1 pasa a LISTO.
+ps
+# P1 ya tiene R1 y R2, así que puede terminar su ráfaga.
+run
+# P1 termina normalmente en t=8 y solo él cuenta en los promedios.
+ps

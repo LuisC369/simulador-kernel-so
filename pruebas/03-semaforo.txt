@@ -1,0 +1,31 @@
+reset
+# ============================================================
+# Caso 4: efectividad del semáforo ante condiciones de carrera
+# ============================================================
+# Saldo inicial Q1,000. A deposita Q500 y B retira Q200, así que espero Q1,300.
+# Sin semáforo, A y B leen 1000 y la última escritura borra a la otra: queda Q800.
+carrera sin
+# Con semáforo, B se bloquea hasta que A termina, lee 1500 y el resultado es Q1,300.
+carrera con
+# ============================================================
+# Caso 5: cola de espera del semáforo binario
+# ============================================================
+# Creo tres procesos para pedir la sección crítica.
+crear 10 5
+crear 10 5
+crear 10 5
+# P1 entra porque la sección está libre.
+wait 1
+# P2 y P3 la encuentran ocupada, así que se bloquean y van a la cola.
+wait 2
+wait 3
+# Debo ver valor 0, a P1 dentro y la cola [P2, P3].
+sem
+# Espero un error: P2 no está dentro, así que no puede hacer signal.
+signal 2
+# P1 sale y la sección pasa directo a P2, el primero de la cola.
+signal 1
+# El valor sigue en 0: ahora P2 está dentro y la cola es [P3].
+sem
+# P1 y P2 están LISTO, y P3 sigue BLOQUEADO.
+ps
