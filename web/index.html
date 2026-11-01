@@ -4,9 +4,147 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Simulador de Kernel</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/web/estilos.css">
 </head>
 <body>
-  <h1>Simulador de Kernel</h1>
-  <p>Sistemas Operativos I, UMG</p>
+  <header class="tarjeta encabezado">
+    <div class="encabezado-fila">
+      <div>
+        <h1>Simulador de Kernel</h1>
+        <p class="subtitulo">Sistemas Operativos I, UMG</p>
+      </div>
+      <div class="reloj" id="reloj">t = 0</div>
+      <div class="controles">
+        <button id="btn-tick" type="button">Tick</button>
+        <button id="btn-auto" type="button" class="principal">Ejecutar</button>
+        <button id="btn-reset" type="button">Reset</button>
+        <label>Velocidad
+          <select id="sel-velocidad">
+            <option value="1000">Lento</option>
+            <option value="500" selected>Normal</option>
+            <option value="200">Rápido</option>
+          </select>
+        </label>
+      </div>
+    </div>
+    <dl class="metricas" id="metricas"></dl>
+  </header>
+
+  <main class="rejilla">
+    <section class="tarjeta">
+      <h2>Crear proceso</h2>
+      <form id="form-crear" class="formulario" autocomplete="off">
+        <label>Memoria (MB)<input id="in-mb" type="text" inputmode="numeric" class="mono"></label>
+        <label>Ráfaga<input id="in-rafaga" type="text" inputmode="numeric" class="mono"></label>
+        <button type="submit" class="principal">Crear</button>
+        <button id="btn-ejemplo" type="button">Ejemplo Tarea 12</button>
+      </form>
+      <p class="mensaje-error" id="error-crear"></p>
+    </section>
+
+    <section class="tarjeta">
+      <h2>CPU y cola de listos</h2>
+      <div class="cpu-contenedor">
+        <div class="cpu" id="cpu-tarjeta">
+          <div class="cpu-pid mono" id="cpu-pid">Libre</div>
+          <div class="cpu-dato">Quantum</div>
+          <div class="quantum" id="cpu-quantum"></div>
+          <div class="cpu-dato">Ráfaga restante: <span class="mono" id="cpu-rafaga-texto">-</span></div>
+          <div class="barra"><div class="barra-relleno" id="cpu-barra"></div></div>
+          <div class="cpu-dato">PC del TCB: <span class="mono" id="cpu-pc">-</span></div>
+        </div>
+        <div class="cola-contenedor">
+          <div class="cpu-dato">Cola de listos</div>
+          <div class="chips" id="cola-listos"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="tarjeta ancho-completo">
+      <h2>Tabla de procesos (PCB)</h2>
+      <div class="tabla-contenedor">
+        <table>
+          <thead>
+            <tr>
+              <th>PID</th><th>Estado</th><th>MB</th><th>Dir</th><th>Ráfaga</th><th>Resta</th><th>PC</th>
+              <th>Llegada</th><th>Fin</th><th>Retorno</th><th>Espera</th><th>Respuesta</th><th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="tabla-cuerpo"></tbody>
+        </table>
+      </div>
+      <p class="mensaje-error" id="error-tabla"></p>
+    </section>
+
+    <section class="tarjeta ancho-completo">
+      <h2>Memoria RAM (100 MB)</h2>
+      <div class="memoria-barra" id="mem-barra"></div>
+      <div class="memoria-escala mono"><span>0</span><span>25</span><span>50</span><span>75</span><span>100</span></div>
+      <p class="resumen mono" id="mem-resumen"></p>
+    </section>
+
+    <section class="tarjeta ancho-completo">
+      <h2>Diagrama de Gantt</h2>
+      <div class="gantt" id="gantt"></div>
+    </section>
+
+    <section class="tarjeta">
+      <h2>Sección crítica</h2>
+      <div class="semaforo-fila">
+        <div class="semaforo" id="sem-indicador"></div>
+        <div>
+          <div class="mono" id="sem-valor-texto"></div>
+          <div>Dentro: <span class="mono" id="sem-dentro"></span></div>
+          <div>Variable compartida: <span class="mono" id="sem-variable"></span></div>
+        </div>
+      </div>
+      <div class="cpu-dato">Cola de espera</div>
+      <div class="chips" id="sem-cola"></div>
+      <div class="acciones-panel">
+        <button id="btn-carrera-sin" type="button">Carrera sin semáforo</button>
+        <button id="btn-carrera-con" type="button">Carrera con semáforo</button>
+      </div>
+      <pre class="carrera mono" id="carrera-salida"></pre>
+    </section>
+
+    <section class="tarjeta">
+      <h2>Recursos y deadlock</h2>
+      <div class="banner-deadlock" id="banner-deadlock" hidden></div>
+      <svg id="grafo" class="grafo" viewBox="0 0 520 240" role="img" aria-label="Grafo de asignación de recursos"></svg>
+      <p class="leyenda">Flecha sólida: asignación. Flecha punteada: solicitud.</p>
+      <form id="form-solicitar" class="formulario" autocomplete="off">
+        <label>PID<input id="in-pid" type="text" class="mono"></label>
+        <label>Recurso
+          <select id="sel-recurso">
+            <option value="R1">R1</option>
+            <option value="R2">R2</option>
+          </select>
+        </label>
+        <button type="submit" class="principal">Solicitar</button>
+        <button id="btn-deadlock" type="button">Forzar deadlock</button>
+      </form>
+      <p class="mensaje-error" id="error-recursos"></p>
+    </section>
+
+    <section class="tarjeta ancho-completo">
+      <h2>Consola y bitácora</h2>
+      <div class="consola">
+        <pre class="consola-salida mono" id="consola-salida"></pre>
+        <form id="form-consola" class="consola-entrada" autocomplete="off">
+          <span class="mono">kernel&gt;</span>
+          <input id="in-consola" type="text" class="mono" spellcheck="false" aria-label="Comando">
+        </form>
+      </div>
+      <div class="bitacora-encabezado">
+        <h3>Bitácora de eventos</h3>
+        <span class="copiar-estado" id="copiar-estado"></span>
+        <button id="btn-copiar" type="button">Copiar bitácora</button>
+      </div>
+      <ul class="bitacora mono" id="bitacora"></ul>
+    </section>
+  </main>
+
+  <script type="module" src="/web/app.js"></script>
 </body>
 </html>
