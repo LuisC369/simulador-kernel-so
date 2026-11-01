@@ -1,0 +1,19 @@
+{
+  "name": "simulador-kernel-so",
+  "version": "1.0.0",
+  "description": "Simulador de funciones del kernel de un sistema operativo - Sistemas Operativos I, UMG",
+  "type": "module",
+  "scripts": {
+    "cli": "node cli.js",
+    "web": "node server.js",
+    "test": "node --test",
+    "caso:memoria": "node cli.js pruebas/01-memoria.txt",
+    "caso:rr": "node cli.js pruebas/02-round-robin.txt",
+    "caso:semaforo": "node cli.js pruebas/03-semaforo.txt",
+    "caso:deadlock": "node cli.js pruebas/04-deadlock.txt",
+    "casos": "node cli.js pruebas/01-memoria.txt pruebas/02-round-robin.txt pruebas/03-semaforo.txt pruebas/04-deadlock.txt"
+  },
+  "engines": { "node": ">=18" },
+  "author": "Luis Pablo de Jesús López Carrera",
+  "license": "MIT"
+}
