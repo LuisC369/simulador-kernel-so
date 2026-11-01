@@ -8,6 +8,7 @@ import { ESTADOS, crearPCB, retorno, respuesta, espera } from './pcb.js';
 import { Memoria, MEMORIA_TOTAL } from './memoria.js';
 import { Planificador, QUANTUM } from './planificador.js';
 import { SemaforoBinario, SALDO_INICIAL } from './semaforo.js';
+import { GestorRecursos } from './recursos.js';
 
 const RAFAGA_MAXIMA = 100;
 
@@ -46,6 +47,8 @@ export class Kernel {
     this.planificador = new Planificador(this.quantum);
     this.semaforo = new SemaforoBinario();
     this.variableCompartida = SALDO_INICIAL; // región protegida por el semáforo
+    this.recursos = new GestorRecursos();
+    this.deadlock = null; // ruta del ciclo detectado, o null si no hay deadlock
     this.historial = [];  // pid o null por cada tick; es la base del diagrama de Gantt
     this.eventos = [];    // bitácora
   }
@@ -107,12 +110,103 @@ export class Kernel {
     }
   }
 
-  // Un proceso que completó su ráfaga devuelve su memoria y su lugar en el semáforo.
+  // Un proceso que completó su ráfaga devuelve su memoria, semáforo y recursos.
   finalizar(pcb) {
     pcb.fin = this.reloj;
     this.memoria.liberar(pcb.pid);
     this.registrar('ok', 'P' + pcb.pid + ' terminó y liberó ' + pcb.memoria + ' MB');
     this.liberarSemaforo(pcb.pid);
+    this.liberarRecursos(pcb.pid);
+  }
+
+  // Un proceso pide un recurso. Si está ocupado, se bloquea y sale del planificador.
+  // Después de cada solicitud se busca un ciclo: es la única forma de que aparezca uno.
+  solicitar(pid, ridTexto) {
+    const proceso = this.obtenerActivo(pid);
+    const rid = String(ridTexto).trim().toUpperCase();
+    if (rid !== 'R1' && rid !== 'R2') {
+      throw new Error('Recurso inválido "' + ridTexto + '". Debe ser R1 o R2.');
+    }
+    if (proceso.estado === ESTADOS.BLOQUEADO) {
+      throw new Error('P' + pid + ' está bloqueado y no puede solicitar recursos.');
+    }
+    if (this.recursos.recursos[rid].duenio === pid) {
+      throw new Error('P' + pid + ' ya tiene ' + rid + '.');
+    }
+    const asignado = this.recursos.solicitar(pid, rid);
+    if (asignado) {
+      this.registrar('ok', rid + ' asignado a P' + pid);
+    } else {
+      this.planificador.quitar(pid);
+      proceso.estado = ESTADOS.BLOQUEADO;
+      proceso.esperandoRecurso = rid;
+      this.registrar('info', 'P' + pid + ' se bloquea: espera ' + rid + ', que tiene P' + this.recursos.recursos[rid].duenio);
+    }
+    this.actualizarDeadlock();
+    return asignado;
+  }
+
+  // Fuerza la espera circular con la secuencia del enunciado: A retiene R1 y pide R2;
+  // B retiene R2 y pide R1. La alerta la genera la detección normal de solicitar().
+  forzarDeadlock() {
+    if (this.recursos.recursos.R1.duenio !== null || this.recursos.recursos.R2.duenio !== null) {
+      throw new Error('R1 y R2 deben estar libres para forzar el deadlock.');
+    }
+    // Se revisa antes de crear: si solo cupiera A, quedaría un proceso a medias.
+    if (this.cuposParaDiezMB() < 2) {
+      const mensaje = 'Out of Memory: el deadlock requiere dos procesos de 10 MB; hueco contiguo mayor '
+        + this.memoria.huecoMayor() + ' MB; libre total ' + this.memoria.libreTotal() + ' MB';
+      this.registrar('error', mensaje);
+      throw new Error(mensaje);
+    }
+    const a = this.crearProceso('10', '5');
+    const b = this.crearProceso('10', '5');
+    this.solicitar(a.pid, 'R1');
+    this.solicitar(b.pid, 'R2');
+    this.solicitar(a.pid, 'R2');
+    this.solicitar(b.pid, 'R1');
+    return this.deadlock;
+  }
+
+  cuposParaDiezMB() {
+    let cupos = 0;
+    for (let i = 0; i < this.memoria.bloques.length; i++) {
+      const bloque = this.memoria.bloques[i];
+      if (bloque.pid === null) {
+        cupos = cupos + Math.floor(bloque.tamano / 10);
+      }
+    }
+    return cupos;
+  }
+
+  // Compara lo detectado con lo que se sabía para avisar solo cuando algo cambia.
+  actualizarDeadlock() {
+    const ciclo = this.recursos.detectarCiclo();
+    if (ciclo !== null && this.deadlock === null) {
+      this.registrar('alerta', 'DEADLOCK detectado: ' + ciclo.join(' -> '));
+    }
+    if (ciclo === null && this.deadlock !== null) {
+      this.registrar('ok', 'Deadlock resuelto');
+    }
+    this.deadlock = ciclo;
+  }
+
+  // Entrega los recursos de un proceso que se va al primero de cada cola, y comprueba
+  // si con eso se rompió el ciclo.
+  liberarRecursos(pid) {
+    const liberados = this.recursos.liberarDe(pid);
+    for (let i = 0; i < liberados.length; i++) {
+      const rid = liberados[i].rid;
+      const nuevoDuenio = liberados[i].nuevoDuenio;
+      this.registrar('info', 'P' + pid + ' liberó ' + rid);
+      if (nuevoDuenio !== null) {
+        const proceso = this.obtenerActivo(nuevoDuenio);
+        proceso.esperandoRecurso = null;
+        this.planificador.agregar(proceso);
+        this.registrar('ok', rid + ' asignado a P' + nuevoDuenio + ', que pasa a LISTO');
+      }
+    }
+    this.actualizarDeadlock();
   }
 
   // Un proceso intenta entrar a la sección crítica. Si está ocupada, se bloquea: sale
@@ -138,7 +232,12 @@ export class Kernel {
 
   // El proceso sale de la sección crítica. Si el pid no es el dueño, el semáforo lanza Error.
   signal(pid) {
-    this.obtenerActivo(pid);
+    const proceso = this.obtenerActivo(pid);
+    // Un proceso dentro de la sección puede estar bloqueado esperando un recurso. Como
+    // no está ejecutándose, no puede salir de la sección hasta que lo despierten.
+    if (this.semaforo.dentro === pid && proceso.estado === ESTADOS.BLOQUEADO) {
+      throw new Error('P' + pid + ' está bloqueado y no puede hacer signal.');
+    }
     const despertado = this.semaforo.signal(pid);
     this.registrar('ok', 'P' + pid + ' salió de la sección crítica');
     this.despertarDeSemaforo(despertado);
@@ -189,7 +288,8 @@ export class Kernel {
     return this.planificador.enEjecucion !== null || this.planificador.cola.length > 0;
   }
 
-  // Aborta un proceso: lo saca del planificador y libera su memoria y su semáforo.
+  // Recuperación por terminación: aborta un proceso, libera todo lo que retiene y
+  // despierta a quien corresponda. Así se rompe el ciclo de un deadlock.
   kill(pid) {
     const proceso = this.obtenerActivo(pid);
     this.planificador.quitar(pid);
@@ -197,9 +297,11 @@ export class Kernel {
     proceso.estado = ESTADOS.TERMINADO;
     proceso.abortado = true;
     proceso.enColaSemaforo = false;
+    proceso.esperandoRecurso = null;
     proceso.fin = this.reloj;
     this.registrar('alerta', 'P' + pid + ' abortado; liberó ' + proceso.memoria + ' MB');
     this.liberarSemaforo(pid);
+    this.liberarRecursos(pid);
     return proceso;
   }
 

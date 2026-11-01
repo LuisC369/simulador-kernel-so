@@ -24,7 +24,9 @@ const AYUDA = [
   ['signal <pid>', 'el proceso sale de la sección crítica'],
   ['sem', 'muestra el semáforo, su cola y la variable compartida'],
   ['carrera <sin|con>', 'demuestra la condición de carrera, sin o con semáforo'],
-  ['kill <pid>', 'aborta un proceso'],
+  ['solicitar <pid> <R1|R2>', 'el proceso pide un recurso'],
+  ['deadlock', 'fuerza una espera circular entre dos procesos nuevos'],
+  ['kill <pid>', 'aborta un proceso y libera lo que retiene'],
   ['reset', 'reinicia el simulador'],
 ];
 
@@ -75,6 +77,12 @@ export function ejecutarComando(kernel, linea) {
       case 'carrera':
         exigirArgumentos(args, 1, 1, 'carrera <sin|con>');
         return comandoCarrera(args);
+      case 'solicitar':
+        exigirArgumentos(args, 2, 2, 'solicitar <pid> <R1|R2>');
+        return comandoSolicitar(kernel, args);
+      case 'deadlock':
+        exigirArgumentos(args, 0, 0, 'deadlock');
+        return comandoDeadlock(kernel);
       case 'kill':
         exigirArgumentos(args, 1, 1, 'kill <pid>');
         return comandoKill(kernel, args);
@@ -158,6 +166,19 @@ function comandoSemaforo(kernel, operacion, args) {
   } else {
     kernel.signal(pid);
   }
+  return textoEventos(kernel, desde);
+}
+
+function comandoSolicitar(kernel, args) {
+  const pid = leerPid(args[0]);
+  const desde = kernel.eventos.length;
+  kernel.solicitar(pid, args[1]);
+  return textoEventos(kernel, desde);
+}
+
+function comandoDeadlock(kernel) {
+  const desde = kernel.eventos.length;
+  kernel.forzarDeadlock();
   return textoEventos(kernel, desde);
 }
 
