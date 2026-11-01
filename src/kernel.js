@@ -7,6 +7,7 @@
 import { ESTADOS, crearPCB, retorno, respuesta, espera } from './pcb.js';
 import { Memoria, MEMORIA_TOTAL } from './memoria.js';
 import { Planificador, QUANTUM } from './planificador.js';
+import { SemaforoBinario, SALDO_INICIAL } from './semaforo.js';
 
 const RAFAGA_MAXIMA = 100;
 
@@ -43,6 +44,8 @@ export class Kernel {
     this.procesos = [];
     this.memoria = new Memoria(this.memoriaTotal);
     this.planificador = new Planificador(this.quantum);
+    this.semaforo = new SemaforoBinario();
+    this.variableCompartida = SALDO_INICIAL; // región protegida por el semáforo
     this.historial = [];  // pid o null por cada tick; es la base del diagrama de Gantt
     this.eventos = [];    // bitácora
   }
@@ -104,11 +107,58 @@ export class Kernel {
     }
   }
 
-  // Un proceso que completó su ráfaga devuelve su memoria al sistema.
+  // Un proceso que completó su ráfaga devuelve su memoria y su lugar en el semáforo.
   finalizar(pcb) {
     pcb.fin = this.reloj;
     this.memoria.liberar(pcb.pid);
     this.registrar('ok', 'P' + pcb.pid + ' terminó y liberó ' + pcb.memoria + ' MB');
+    this.liberarSemaforo(pcb.pid);
+  }
+
+  // Un proceso intenta entrar a la sección crítica. Si está ocupada, se bloquea: sale
+  // del planificador para no gastar CPU mientras espera.
+  wait(pid) {
+    const proceso = this.obtenerActivo(pid);
+    if (this.semaforo.dentro === pid) {
+      throw new Error('P' + pid + ' ya está dentro de la sección crítica.');
+    }
+    if (proceso.estado === ESTADOS.BLOQUEADO) {
+      throw new Error('P' + pid + ' está bloqueado y no puede hacer wait.');
+    }
+    if (this.semaforo.wait(pid)) {
+      this.registrar('ok', 'P' + pid + ' entró a la sección crítica');
+      return true;
+    }
+    this.planificador.quitar(pid);
+    proceso.estado = ESTADOS.BLOQUEADO;
+    proceso.enColaSemaforo = true;
+    this.registrar('info', 'P' + pid + ' se bloquea: la sección crítica está ocupada por P' + this.semaforo.dentro);
+    return false;
+  }
+
+  // El proceso sale de la sección crítica. Si el pid no es el dueño, el semáforo lanza Error.
+  signal(pid) {
+    this.obtenerActivo(pid);
+    const despertado = this.semaforo.signal(pid);
+    this.registrar('ok', 'P' + pid + ' salió de la sección crítica');
+    this.despertarDeSemaforo(despertado);
+    return despertado;
+  }
+
+  // Quita a un proceso que termina o se aborta, y despierta al siguiente si corresponde.
+  liberarSemaforo(pid) {
+    this.despertarDeSemaforo(this.semaforo.quitar(pid));
+  }
+
+  // El despertado ya es el nuevo dueño de la sección; pasa de BLOQUEADO a LISTO.
+  despertarDeSemaforo(pid) {
+    if (pid === null) {
+      return;
+    }
+    const proceso = this.obtenerActivo(pid);
+    proceso.enColaSemaforo = false;
+    this.planificador.agregar(proceso);
+    this.registrar('ok', 'P' + pid + ' despierta y entra a la sección crítica');
   }
 
   // El límite garantiza que el comando siempre devuelva el control. Con muchos
@@ -139,16 +189,17 @@ export class Kernel {
     return this.planificador.enEjecucion !== null || this.planificador.cola.length > 0;
   }
 
-  // Aborta un proceso. En esta versión saca el proceso del planificador y libera
-  // su memoria.
+  // Aborta un proceso: lo saca del planificador y libera su memoria y su semáforo.
   kill(pid) {
     const proceso = this.obtenerActivo(pid);
     this.planificador.quitar(pid);
     this.memoria.liberar(pid);
     proceso.estado = ESTADOS.TERMINADO;
     proceso.abortado = true;
+    proceso.enColaSemaforo = false;
     proceso.fin = this.reloj;
     this.registrar('alerta', 'P' + pid + ' abortado; liberó ' + proceso.memoria + ' MB');
+    this.liberarSemaforo(pid);
     return proceso;
   }
 

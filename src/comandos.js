@@ -7,6 +7,7 @@
 
 import { ESTADOS, retorno, respuesta, espera } from './pcb.js';
 import { validarEntero } from './kernel.js';
+import { simularCarrera } from './semaforo.js';
 
 const PID_MAXIMO = 999999;
 
@@ -19,6 +20,10 @@ const AYUDA = [
   ['tick [n]', 'avanza n unidades de tiempo (1 a 100; por defecto 1)'],
   ['run', 'ejecuta hasta que no queden procesos ejecutables'],
   ['gantt', 'muestra el diagrama de Gantt en texto'],
+  ['wait <pid>', 'el proceso pide entrar a la sección crítica'],
+  ['signal <pid>', 'el proceso sale de la sección crítica'],
+  ['sem', 'muestra el semáforo, su cola y la variable compartida'],
+  ['carrera <sin|con>', 'demuestra la condición de carrera, sin o con semáforo'],
   ['kill <pid>', 'aborta un proceso'],
   ['reset', 'reinicia el simulador'],
 ];
@@ -58,6 +63,18 @@ export function ejecutarComando(kernel, linea) {
       case 'gantt':
         exigirArgumentos(args, 0, 0, 'gantt');
         return [textoGantt(kernel.historial)];
+      case 'wait':
+        exigirArgumentos(args, 1, 1, 'wait <pid>');
+        return comandoSemaforo(kernel, 'wait', args);
+      case 'signal':
+        exigirArgumentos(args, 1, 1, 'signal <pid>');
+        return comandoSemaforo(kernel, 'signal', args);
+      case 'sem':
+        exigirArgumentos(args, 0, 0, 'sem');
+        return comandoSem(kernel);
+      case 'carrera':
+        exigirArgumentos(args, 1, 1, 'carrera <sin|con>');
+        return comandoCarrera(args);
       case 'kill':
         exigirArgumentos(args, 1, 1, 'kill <pid>');
         return comandoKill(kernel, args);
@@ -131,6 +148,57 @@ function comandoKill(kernel, args) {
   const desde = kernel.eventos.length;
   kernel.kill(leerPid(args[0]));
   return textoEventos(kernel, desde);
+}
+
+function comandoSemaforo(kernel, operacion, args) {
+  const pid = leerPid(args[0]);
+  const desde = kernel.eventos.length;
+  if (operacion === 'wait') {
+    kernel.wait(pid);
+  } else {
+    kernel.signal(pid);
+  }
+  return textoEventos(kernel, desde);
+}
+
+function comandoSem(kernel) {
+  const semaforo = kernel.semaforo;
+  const cola = [];
+  for (let i = 0; i < semaforo.cola.length; i++) {
+    cola.push('P' + semaforo.cola[i]);
+  }
+  return [
+    'Semáforo: valor ' + semaforo.valor + (semaforo.valor === 1 ? ' (libre)' : ' (ocupado)'),
+    'Dentro de la sección crítica: ' + (semaforo.dentro === null ? 'nadie' : 'P' + semaforo.dentro),
+    'Cola de espera: [' + cola.join(', ') + ']',
+    'Variable compartida: ' + textoQuetzales(kernel.variableCompartida),
+  ];
+}
+
+function textoQuetzales(monto) {
+  return 'Q' + monto.toLocaleString('en-US');
+}
+
+function comandoCarrera(args) {
+  const modo = args[0].toLowerCase();
+  if (modo !== 'sin' && modo !== 'con') {
+    throw new Error('opción inválida "' + args[0] + '". Uso: carrera <sin|con>');
+  }
+  const resultado = simularCarrera(modo === 'con');
+  const filas = [['PROCESO', 'ACCION', 'LOCAL', 'SALDO']];
+  for (let i = 0; i < resultado.pasos.length; i++) {
+    const paso = resultado.pasos[i];
+    filas.push([paso.proceso, paso.accion, valorOGuion(paso.valorLocal), String(paso.saldo)]);
+  }
+  const lineas = textoTabla(filas);
+  lineas.push('');
+  lineas.push('Resultado final: ' + textoQuetzales(resultado.final) + ' | Esperado: ' + textoQuetzales(resultado.esperado));
+  if (resultado.final === resultado.esperado) {
+    lineas.push('Correcto: el semáforo garantizó la exclusión mutua.');
+  } else {
+    lineas.push('Incorrecto: condición de carrera, se perdió una actualización.');
+  }
+  return lineas;
 }
 
 // Los eventos nuevos son los que se agregaron a la bitácora desde la posición "desde".
