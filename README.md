@@ -119,5 +119,5 @@ Luis Pablo de Jesús López Carrera, carné 7690-26-6662.
 
 ## Enlaces
 
-- Video de demostración en YouTube: [PENDIENTE: enlace al video]
-- Documento técnico en PDF: [PENDIENTE: enlace al documento]
+- Video de demostración en YouTube: [https://youtu.be/_pz6z4bjee4](https://youtu.be/_pz6z4bjee4)
+- Documento técnico: entregado en PDF en Canvas
